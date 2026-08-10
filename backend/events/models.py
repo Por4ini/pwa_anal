@@ -11,12 +11,15 @@ class AnalyticsEvent(models.Model):
     visitor_id = models.CharField(max_length=64, blank=True, db_index=True)
     session_id = models.CharField(max_length=64, blank=True, db_index=True)
     customer_id = models.CharField(max_length=128, blank=True, db_index=True)
+    device_type = models.CharField(max_length=16, blank=True, db_index=True)
+    interaction_surface = models.CharField(max_length=32, blank=True, db_index=True)
 
     location_id = models.CharField(max_length=128, blank=True, db_index=True)
     location_uniq_id = models.CharField(max_length=128, blank=True, db_index=True)
     table_id = models.CharField(max_length=128, blank=True)
     product_id = models.CharField(max_length=128, blank=True, db_index=True)
     order_id = models.CharField(max_length=128, blank=True, db_index=True)
+    booking_id = models.CharField(max_length=128, blank=True, db_index=True)
 
     page_path = models.CharField(max_length=1024, blank=True)
     referrer_path = models.CharField(max_length=1024, blank=True)
@@ -39,4 +42,3 @@ class AnalyticsEvent(models.Model):
 
     def __str__(self):
         return f"{self.client_alias}:{self.event_name}:{self.event_id}"
-

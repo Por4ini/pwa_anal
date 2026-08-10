@@ -20,9 +20,16 @@ class AnalyticsApiTests(TestCase):
             "source": "web",
             "visitor_id": "visitor-1",
             "session_id": "session-1",
+            "customer_id": "customer-1",
+            "device_type": "mobile",
+            "interaction_surface": "tile",
             "location_id": "16751",
             "product_id": "42",
-            "properties": {"product_name": "Sauce", "phone": "+380000000000"},
+            "properties": {
+                "product_name": "Sauce",
+                "phone": "+380000000000",
+                "order_comment": "Без цибулі",
+            },
         }
         payload.update(overrides)
         return payload
@@ -40,7 +47,10 @@ class AnalyticsApiTests(TestCase):
         self.assertEqual(response.json()["accepted"], 1)
         stored = AnalyticsEvent.objects.get()
         self.assertEqual(stored.properties["product_name"], "Sauce")
+        self.assertEqual(stored.properties["order_comment"], "Без цибулі")
         self.assertNotIn("phone", stored.properties)
+        self.assertEqual(stored.device_type, "mobile")
+        self.assertEqual(stored.interaction_surface, "tile")
         self.assertTrue(stored.ip_hash)
 
     def test_duplicate_event_is_idempotent(self):
@@ -81,3 +91,36 @@ class AnalyticsApiTests(TestCase):
         self.assertEqual(response.json()["results"][0]["product_id"], "42")
         self.assertEqual(csv_response.status_code, 200)
         self.assertEqual(csv_response["Content-Type"], "text/csv; charset=utf-8")
+
+    def test_manager_metrics_search_privacy_and_comment_feeds(self):
+        events = [
+            self.event(event_name="session_started", visitor_id="mobile-1", product_id="", properties={}),
+            self.event(event_name="session_started", visitor_id="mobile-2", product_id="", properties={}),
+            self.event(event_name="cart_item_added", visitor_id="mobile-1", properties={"product_name": "Roll"}),
+            self.event(event_name="order_created", visitor_id="mobile-1", order_id="order-1", product_id="", properties={"total": 500, "order_comment": "Без васабі"}),
+            self.event(event_name="order_created", visitor_id="mobile-2", order_id="order-2", product_id="", properties={"total": 700}),
+            self.event(event_name="upsell_order_attributed", visitor_id="mobile-1", order_id="order-1", product_id="", properties={"quantity": 1, "revenue": 50, "products": []}),
+            self.event(event_name="menu_searched", visitor_id="must-disappear", session_id="must-disappear", customer_id="must-disappear", page_path="/private", product_id="", properties={"search_term": "Філадельфія"}),
+            self.event(event_name="booking_created", visitor_id="mobile-1", booking_id="booking-1", product_id="", properties={"booking_comment": "Біля вікна", "guest_count": 2}),
+        ]
+
+        response = self.post_events(events)
+        overview = self.dashboard_get("/api/dashboard/overview").json()
+        search = AnalyticsEvent.objects.get(event_name="menu_searched")
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(overview["upsell"]["total_orders"], 2)
+        self.assertEqual(overview["upsell"]["attributed_orders"], 1)
+        self.assertEqual(overview["upsell"]["order_share_rate"], 50.0)
+        self.assertEqual(overview["mobile_tile"]["mobile_visitors"], 2)
+        self.assertEqual(overview["mobile_tile"]["tile_cart_visitors"], 1)
+        self.assertEqual(overview["mobile_tile"]["conversion_rate"], 50.0)
+        self.assertEqual(overview["searches"]["queries"][0], {"query": "Філадельфія", "count": 1})
+        self.assertEqual(overview["order_comments"]["items"][0]["comment"], "Без васабі")
+        self.assertEqual(overview["booking_comments"]["items"][0]["comment"], "Біля вікна")
+        self.assertEqual(search.visitor_id, "")
+        self.assertEqual(search.session_id, "")
+        self.assertEqual(search.customer_id, "")
+        self.assertEqual(search.page_path, "")
+        self.assertEqual(search.user_agent, "")
+        self.assertEqual(search.ip_hash, "")

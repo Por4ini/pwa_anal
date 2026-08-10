@@ -46,11 +46,11 @@ Set the runtime setting for web and QR services:
 ANALYTICS_COLLECTOR_URL=http://127.0.0.1:67/api/v2/pwa/analytics/events
 ```
 
-For production use the public HTTPS host, for example:
+Production collector and dashboard host:
 
 ```env
-ANALYTICS_COLLECTOR_URL=https://analytics.example.com/api/v2/pwa/analytics/events
-CORS_ALLOWED_ORIGINS=https://pwa.example.com,https://qr.example.com
+ANALYTICS_COLLECTOR_URL=https://api.squadras.cc/api/v2/pwa/analytics/events
+CORS_ALLOW_ALL_ORIGINS=true
 ```
 
 `ANALYTICS_COLLECTOR_URL` is rendered into the PWA page at runtime, so changing the collector host does not require changing event integrations. A normal web/QR deployment may still regenerate static assets for unrelated changes.
@@ -102,9 +102,10 @@ GET /api/dashboard/events.csv
 Supported filters:
 
 ```text
-date_from, date_to, client_alias, source, event_name,
+date_from, date_to, client_alias, source, event_name, device_type,
+interaction_surface,
 location_id, location_uniq_id, visitor_id, session_id,
-customer_id, product_id, order_id, search
+customer_id, product_id, order_id, booking_id, search
 ```
 
 ## Dashboard contents
@@ -119,20 +120,28 @@ customer_id, product_id, order_id, search
 - filtered CSV export;
 - OrderMore block impressions, product impressions, clicks, cart additions,
   attributed orders, final ordered quantity, revenue and product breakdown.
+- percentage of orders containing an attributed OrderMore product;
+- unique mobile visitors and the share that added from tile mode;
+- aggregated anonymous search terms;
+- order and booking comment feeds.
 
 OrderMore attribution counts only products that were added through the block and still existed in the final order payload. Impressions and clicks alone are not counted as ordered products.
 
 ## Privacy and reliability
 
 - Raw IP addresses are never stored; the service stores a salted SHA-256 hash.
-- Keys containing phone, email, address, comment, token, password, authorization or secret are removed recursively from event properties.
+- Keys containing phone, email, address, token, password, authorization or secret are removed recursively from event properties.
+- Only the explicit `order_comment` and `booking_comment` fields are retained;
+  they may contain personal data and therefore remain behind the dashboard token.
+- Search events retain the term and business context, but the collector removes
+  visitor/session/customer IDs, IP hash, User-Agent, page path and referrer.
 - `event_id` is unique, making browser retries idempotent.
 - The request limit is configurable per IP/minute.
 - A request is limited to 50 events and 256 KiB.
 - The browser collector may send `text/plain` to avoid a CORS preflight; the body is still JSON.
 - Dashboard data is protected by a token that is not compiled into the frontend bundle.
 
-For production, replace every secret in `.env`, use HTTPS, restrict `CORS_ALLOWED_ORIGINS`, and do not expose PostgreSQL outside the Compose network.
+For production, replace every secret in `.env`, use HTTPS, and do not expose PostgreSQL outside the Compose network. The event collector accepts tenant storefront origins; dashboard reads remain protected by `DASHBOARD_TOKEN`.
 
 ## Operations
 

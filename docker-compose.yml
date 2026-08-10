@@ -33,7 +33,7 @@ services:
       ANALYTICS_REQUESTS_PER_MINUTE: ${ANALYTICS_REQUESTS_PER_MINUTE:-240}
       ANALYTICS_RETENTION_DAYS: ${ANALYTICS_RETENTION_DAYS:-730}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000,http://pwa.ordr.bz:8000}
-      CORS_ALLOW_ALL_ORIGINS: ${CORS_ALLOW_ALL_ORIGINS:-false}
+      CORS_ALLOW_ALL_ORIGINS: ${CORS_ALLOW_ALL_ORIGINS:-true}
     depends_on:
       db:
         condition: service_healthy

@@ -39,6 +39,7 @@ SENSITIVE_KEY_PARTS = {
     "secret",
     "token",
 }
+ALLOWED_COMMENT_KEYS = {"order_comment", "booking_comment"}
 FILTER_FIELDS = (
     "client_alias",
     "source",
@@ -48,8 +49,11 @@ FILTER_FIELDS = (
     "visitor_id",
     "session_id",
     "customer_id",
+    "device_type",
+    "interaction_surface",
     "product_id",
     "order_id",
+    "booking_id",
 )
 
 
@@ -72,6 +76,9 @@ def _sanitize_properties(value, depth=0):
         for key, item in list(value.items())[:MAX_PROPERTY_ITEMS]:
             normalized_key = _text(key, 128)
             comparable_key = normalized_key.lower().replace("-", "_")
+            if comparable_key in ALLOWED_COMMENT_KEYS:
+                result[normalized_key] = _text(item, 4096)
+                continue
             if any(part in comparable_key for part in SENSITIVE_KEY_PARTS):
                 continue
             result[normalized_key] = _sanitize_properties(item, depth + 1)
@@ -137,6 +144,7 @@ def _build_event(raw_event, request, ip_hash):
     if source not in {"web", "qr", "unknown"}:
         source = "unknown"
     properties = raw_event.get("properties")
+    is_anonymous_search = event_name == "menu_searched"
 
     return AnalyticsEvent(
         event_id=event_id,
@@ -144,20 +152,23 @@ def _build_event(raw_event, request, ip_hash):
         schema_version=max(1, min(int(raw_event.get("schema_version") or 1), 32767)),
         client_alias=_text(raw_event.get("client_alias"), 128),
         source=source,
-        visitor_id=_text(raw_event.get("visitor_id"), 64),
-        session_id=_text(raw_event.get("session_id"), 64),
-        customer_id=_text(raw_event.get("customer_id"), 128),
+        visitor_id="" if is_anonymous_search else _text(raw_event.get("visitor_id"), 64),
+        session_id="" if is_anonymous_search else _text(raw_event.get("session_id"), 64),
+        customer_id="" if is_anonymous_search else _text(raw_event.get("customer_id"), 128),
+        device_type=_text(raw_event.get("device_type"), 16).lower(),
+        interaction_surface=_text(raw_event.get("interaction_surface"), 32).lower(),
         location_id=_text(raw_event.get("location_id"), 128),
         location_uniq_id=_text(raw_event.get("location_uniq_id"), 128),
         table_id=_text(raw_event.get("table_id"), 128),
         product_id=_text(raw_event.get("product_id"), 128),
         order_id=_text(raw_event.get("order_id"), 128),
-        page_path=_text(raw_event.get("page_path"), 1024),
-        referrer_path=_text(raw_event.get("referrer_path"), 1024),
+        booking_id=_text(raw_event.get("booking_id"), 128),
+        page_path="" if is_anonymous_search else _text(raw_event.get("page_path"), 1024),
+        referrer_path="" if is_anonymous_search else _text(raw_event.get("referrer_path"), 1024),
         properties=_sanitize_properties(properties if isinstance(properties, dict) else {}),
         occurred_at=_parse_occurred_at(raw_event.get("occurred_at")),
-        user_agent=_text(request.META.get("HTTP_USER_AGENT"), 512),
-        ip_hash=ip_hash,
+        user_agent="" if is_anonymous_search else _text(request.META.get("HTTP_USER_AGENT"), 512),
+        ip_hash="" if is_anonymous_search else ip_hash,
     )
 
 
@@ -224,6 +235,7 @@ def _filtered_events(request):
             | Q(location_uniq_id__icontains=search)
             | Q(product_id__icontains=search)
             | Q(order_id__icontains=search)
+            | Q(booking_id__icontains=search)
             | Q(page_path__icontains=search)
         )
     return queryset
@@ -239,11 +251,14 @@ def _event_dict(event):
         "visitor_id": event.visitor_id,
         "session_id": event.session_id,
         "customer_id": event.customer_id,
+        "device_type": event.device_type,
+        "interaction_surface": event.interaction_surface,
         "location_id": event.location_id,
         "location_uniq_id": event.location_uniq_id,
         "table_id": event.table_id,
         "product_id": event.product_id,
         "order_id": event.order_id,
+        "booking_id": event.booking_id,
         "page_path": event.page_path,
         "referrer_path": event.referrer_path,
         "properties": event.properties,
@@ -313,13 +328,16 @@ def _upsell_summary(queryset):
     products = sorted(product_totals.values(), key=lambda item: item["revenue"], reverse=True)[:10]
     clicks = event_counts.get("upsell_product_clicked", 0)
     cart_adds = event_counts.get("upsell_cart_added", 0)
-    attributed_orders = event_counts.get("upsell_order_attributed", 0)
+    total_orders = queryset.filter(event_name="order_created").exclude(order_id="").values("order_id").distinct().count()
+    attributed_orders = queryset.filter(event_name="upsell_order_attributed").exclude(order_id="").values("order_id").distinct().count()
     return {
         "block_impressions": event_counts.get("upsell_block_impression", 0),
         "product_impressions": event_counts.get("upsell_product_impression", 0),
         "clicks": clicks,
         "cart_adds": cart_adds,
         "attributed_orders": attributed_orders,
+        "total_orders": total_orders,
+        "order_share_rate": round(attributed_orders / total_orders * 100, 2) if total_orders else 0,
         "quantity": float(quantity),
         "revenue": float(revenue),
         "click_to_cart_rate": round(cart_adds / clicks * 100, 2) if clicks else 0,
@@ -329,6 +347,68 @@ def _upsell_summary(queryset):
             for item in products
         ],
     }
+
+
+def _mobile_tile_summary(queryset):
+    mobile_visitors = (
+        queryset.filter(device_type="mobile")
+        .exclude(visitor_id="")
+        .values("visitor_id")
+        .distinct()
+        .count()
+    )
+    tile_adds = queryset.filter(
+        event_name="cart_item_added",
+        device_type="mobile",
+        interaction_surface="tile",
+    )
+    tile_cart_visitors = tile_adds.exclude(visitor_id="").values("visitor_id").distinct().count()
+    return {
+        "mobile_visitors": mobile_visitors,
+        "tile_cart_visitors": tile_cart_visitors,
+        "tile_cart_adds": tile_adds.count(),
+        "conversion_rate": round(tile_cart_visitors / mobile_visitors * 100, 2) if mobile_visitors else 0,
+    }
+
+
+def _search_summary(queryset, limit=50):
+    totals = defaultdict(lambda: {"query": "", "count": 0})
+    total_searches = 0
+    for event in queryset.filter(event_name="menu_searched").only("properties").iterator(chunk_size=1000):
+        query = _text((event.properties or {}).get("search_term"), 256)
+        if not query:
+            continue
+        key = query.casefold()
+        totals[key]["query"] = totals[key]["query"] or query
+        totals[key]["count"] += 1
+        total_searches += 1
+    queries = sorted(totals.values(), key=lambda item: (-item["count"], item["query"].casefold()))[:limit]
+    return {"total": total_searches, "unique": len(totals), "queries": queries}
+
+
+def _comment_feed(queryset, event_name, property_name, id_field, limit=100):
+    comments = []
+    total = 0
+    events = queryset.filter(event_name=event_name).only(
+        "occurred_at", "client_alias", "source", "location_id", "location_uniq_id",
+        id_field, "properties",
+    ).order_by("-occurred_at").iterator(chunk_size=1000)
+    for event in events:
+        comment = _text((event.properties or {}).get(property_name), 4096)
+        if not comment:
+            continue
+        total += 1
+        if len(comments) >= limit:
+            continue
+        comments.append({
+            "occurred_at": event.occurred_at.isoformat(),
+            "client_alias": event.client_alias,
+            "source": event.source,
+            "location": event.location_uniq_id or event.location_id,
+            "reference_id": getattr(event, id_field) or _text((event.properties or {}).get(id_field), 128),
+            "comment": comment,
+        })
+    return {"total": total, "items": comments}
 
 
 @require_GET
@@ -409,6 +489,8 @@ def dashboard_meta(request):
             "event_names": options("event_name"),
             "locations": options("location_id"),
             "location_uniq_ids": options("location_uniq_id"),
+            "device_types": options("device_type"),
+            "interaction_surfaces": options("interaction_surface"),
         },
         "latest_event_at": bounds["first"].isoformat() if bounds["first"] else None,
         "dashboard_token_required": bool(settings.DASHBOARD_TOKEN),
@@ -474,6 +556,10 @@ def dashboard_overview(request):
         "top_products": _top_products(queryset),
         "top_pages": top_pages,
         "upsell": _upsell_summary(queryset),
+        "mobile_tile": _mobile_tile_summary(queryset),
+        "searches": _search_summary(queryset),
+        "order_comments": _comment_feed(queryset, "order_created", "order_comment", "order_id"),
+        "booking_comments": _comment_feed(queryset, "booking_created", "booking_comment", "booking_id"),
         "range": {
             "first": first_event.isoformat() if first_event else None,
             "last": last_event.isoformat() if last_event else None,
@@ -507,7 +593,8 @@ def dashboard_events_csv(request):
     queryset = _filtered_events(request).iterator(chunk_size=1000)
     fields = [
         "event_id", "event_name", "occurred_at", "client_alias", "source", "visitor_id", "session_id",
-        "customer_id", "location_id", "location_uniq_id", "table_id", "product_id", "order_id", "page_path",
+        "customer_id", "device_type", "interaction_surface", "location_id", "location_uniq_id", "table_id",
+        "product_id", "order_id", "booking_id", "page_path",
         "referrer_path", "properties",
     ]
 
@@ -517,8 +604,9 @@ def dashboard_events_csv(request):
         for event in queryset:
             yield writer.writerow([
                 str(event.event_id), event.event_name, event.occurred_at.isoformat(), event.client_alias, event.source,
-                event.visitor_id, event.session_id, event.customer_id, event.location_id, event.location_uniq_id,
-                event.table_id, event.product_id, event.order_id, event.page_path, event.referrer_path,
+                event.visitor_id, event.session_id, event.customer_id, event.device_type, event.interaction_surface,
+                event.location_id, event.location_uniq_id, event.table_id, event.product_id, event.order_id,
+                event.booking_id, event.page_path, event.referrer_path,
                 json.dumps(event.properties, ensure_ascii=False),
             ])
 

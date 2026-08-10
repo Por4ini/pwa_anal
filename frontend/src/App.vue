@@ -79,6 +79,13 @@
             <label>Customer ID<input v-model.trim="filters.customer_id" placeholder="ID користувача" /></label>
             <label>Product ID<input v-model.trim="filters.product_id" placeholder="ID товару" /></label>
             <label>Order ID<input v-model.trim="filters.order_id" placeholder="ID замовлення" /></label>
+            <label>Booking ID<input v-model.trim="filters.booking_id" placeholder="ID бронювання" /></label>
+            <label>Пристрій
+              <select v-model="filters.device_type"><option value="">Усі пристрої</option><option v-for="item in meta.filters.device_types" :key="item">{{ item }}</option></select>
+            </label>
+            <label>Місце додавання
+              <select v-model="filters.interaction_surface"><option value="">Усі місця</option><option v-for="item in meta.filters.interaction_surfaces" :key="item">{{ item }}</option></select>
+            </label>
             <label class="filter-wide">Пошук<input v-model.trim="filters.search" placeholder="Сторінка, подія, клієнт або будь-який ID" @keyup.enter="applyFilters" /></label>
           </div>
           <div class="filters-card__actions">
@@ -94,6 +101,21 @@
           <KpiCard label="Відвідувачі" :value="number(overview.totals.visitors)" :hint="`${number(overview.totals.sessions)} сесій`" icon="◉" />
           <KpiCard label="Користувачі" :value="number(overview.totals.customers)" hint="авторизовані" icon="◎" />
           <KpiCard label="Замовлення" :value="number(overview.totals.orders)" :hint="`сума ${decimal(overview.totals.order_revenue)}`" icon="✓" tone="accent" />
+        </section>
+
+        <section class="manager-grid">
+          <article class="manager-card manager-card--order-more">
+            <span class="eyebrow eyebrow--light">ПОКАЗНИК МЕНЕДЖЕРА</span>
+            <h3>Замовлення з «Додати ще»</h3>
+            <strong>{{ decimal(overview.upsell.order_share_rate) }}%</strong>
+            <p>{{ number(overview.upsell.attributed_orders) }} із {{ number(overview.upsell.total_orders) }} замовлень містять товар із блоку.</p>
+          </article>
+          <article class="manager-card manager-card--tile">
+            <span class="eyebrow">МОБІЛЬНА ПЛИТКА</span>
+            <h3>Відвідувачі, що додали товар</h3>
+            <strong>{{ decimal(overview.mobile_tile.conversion_rate) }}%</strong>
+            <p>{{ number(overview.mobile_tile.tile_cart_visitors) }} із {{ number(overview.mobile_tile.mobile_visitors) }} мобільних відвідувачів; {{ number(overview.mobile_tile.tile_cart_adds) }} додавань.</p>
+          </article>
         </section>
 
         <section class="panel panel--wide">
@@ -150,6 +172,40 @@
               <tbody><tr v-for="product in overview.upsell.products" :key="product.product_id"><td><strong>{{ product.product_name }}</strong></td><td class="mono">{{ product.product_id }}</td><td>{{ decimal(product.quantity) }}</td><td>{{ decimal(product.revenue) }}</td></tr></tbody>
             </table>
           </div>
+        </section>
+
+        <section class="dashboard-grid insight-grid">
+          <article class="panel">
+            <div class="panel__heading">
+              <div><span class="eyebrow">АНОНІМНИЙ ПОШУК</span><h3>Пошукові запити</h3></div>
+              <span class="panel__meta">{{ number(overview.searches.total) }} пошуків · {{ number(overview.searches.unique) }} унікальних</span>
+            </div>
+            <div v-if="overview.searches.queries.length" class="table-scroll">
+              <table><thead><tr><th>Запит</th><th>Кількість</th></tr></thead><tbody><tr v-for="item in overview.searches.queries" :key="item.query"><td><strong>{{ item.query }}</strong></td><td>{{ number(item.count) }}</td></tr></tbody></table>
+            </div>
+            <div v-else class="empty-compact">Пошукових запитів ще немає</div>
+          </article>
+          <article class="panel comments-panel">
+            <div class="panel__heading">
+              <div><span class="eyebrow">ЗАМОВЛЕННЯ</span><h3>Коментарі до замовлень</h3></div>
+              <span class="panel__meta">{{ number(overview.order_comments.total) }}</span>
+            </div>
+            <div v-if="overview.order_comments.items.length" class="comment-feed">
+              <article v-for="item in overview.order_comments.items" :key="`${item.reference_id}-${item.occurred_at}`"><p>{{ item.comment }}</p><small>{{ item.client_alias || '—' }} · {{ item.location || '—' }} · {{ item.reference_id || '—' }} · {{ dateTime(item.occurred_at) }}</small></article>
+            </div>
+            <div v-else class="empty-compact">Коментарів до замовлень ще немає</div>
+          </article>
+        </section>
+
+        <section class="panel panel--wide comments-panel">
+          <div class="panel__heading">
+            <div><span class="eyebrow">БРОНЮВАННЯ</span><h3>Коментарі до бронювань</h3></div>
+            <span class="panel__meta">{{ number(overview.booking_comments.total) }}</span>
+          </div>
+          <div v-if="overview.booking_comments.items.length" class="comment-feed comment-feed--columns">
+            <article v-for="item in overview.booking_comments.items" :key="`${item.reference_id}-${item.occurred_at}`"><p>{{ item.comment }}</p><small>{{ item.client_alias || '—' }} · {{ item.location || '—' }} · {{ item.reference_id || '—' }} · {{ dateTime(item.occurred_at) }}</small></article>
+          </div>
+          <div v-else class="empty-compact">Коментарів до бронювань ще немає</div>
         </section>
 
         <section class="dashboard-grid">
@@ -227,7 +283,7 @@ monthAgo.setDate(monthAgo.getDate() - 30);
 const emptyFilters = () => ({
   date_from: toDateInput(monthAgo), date_to: toDateInput(today), client_alias: "", source: "", event_name: "",
   location_id: "", location_uniq_id: "", visitor_id: "", session_id: "", customer_id: "", product_id: "",
-  order_id: "", search: "",
+  order_id: "", booking_id: "", device_type: "", interaction_surface: "", search: "",
 });
 
 const emptyOverview = () => ({
@@ -235,7 +291,11 @@ const emptyOverview = () => ({
   funnel: [], timeline: [], granularity: "day",
   breakdowns: { events: [], clients: [], sources: [], locations: [] },
   top_products: [], top_pages: [],
-  upsell: { block_impressions: 0, product_impressions: 0, clicks: 0, cart_adds: 0, attributed_orders: 0, quantity: 0, revenue: 0, click_to_cart_rate: 0, click_to_order_rate: 0, products: [] },
+  upsell: { block_impressions: 0, product_impressions: 0, clicks: 0, cart_adds: 0, attributed_orders: 0, total_orders: 0, order_share_rate: 0, quantity: 0, revenue: 0, click_to_cart_rate: 0, click_to_order_rate: 0, products: [] },
+  mobile_tile: { mobile_visitors: 0, tile_cart_visitors: 0, tile_cart_adds: 0, conversion_rate: 0 },
+  searches: { total: 0, unique: 0, queries: [] },
+  order_comments: { total: 0, items: [] },
+  booking_comments: { total: 0, items: [] },
 });
 
 const tokenInput = ref(getToken());
@@ -247,7 +307,7 @@ const advancedFilters = ref(false);
 const selectedEvent = ref(null);
 const filters = reactive(emptyFilters());
 const appliedFilters = ref({ ...filters });
-const meta = reactive({ filters: { client_aliases: [], sources: [], event_names: [], locations: [], location_uniq_ids: [] } });
+const meta = reactive({ filters: { client_aliases: [], sources: [], event_names: [], locations: [], location_uniq_ids: [], device_types: [], interaction_surfaces: [] } });
 const overview = reactive(emptyOverview());
 const events = reactive({ count: 0, page: 1, page_size: 50, results: [] });
 
@@ -264,6 +324,7 @@ const labels = {
   menu_searched: "Пошук", product_viewed: "Перегляд товару", wishlist_item_added: "У бажане", contact_clicked: "Контакт",
   cart_item_added: "Додано в кошик", cart_quantity_changed: "Змінено кількість", cart_item_removed: "Видалено з кошика",
   cart_cleared: "Кошик очищено", checkout_started: "Початок оформлення", order_created: "Замовлення створено",
+  booking_created: "Бронювання створено",
   purchase_completed: "Оплату завершено", upsell_block_impression: "Показ OrderMore", upsell_product_impression: "Показ товару OrderMore",
   upsell_product_clicked: "Клік OrderMore", upsell_cart_added: "OrderMore у кошику", upsell_order_attributed: "OrderMore у замовленні",
 };
