@@ -34,7 +34,7 @@ The repository contains a gitignored local `.env` with these development values:
 ```text
 Dashboard: http://127.0.0.1:67
 Token: local-dashboard-token
-Collector: http://127.0.0.1:67/api/v2/pwa/analytics/events
+Collector: http://127.0.0.1:67/api/v2/pwa/activity/collect
 Health: http://127.0.0.1:67/health/
 ```
 
@@ -43,13 +43,13 @@ Health: http://127.0.0.1:67/health/
 Set the runtime setting for web and QR services:
 
 ```env
-ANALYTICS_COLLECTOR_URL=http://127.0.0.1:67/api/v2/pwa/analytics/events
+ANALYTICS_COLLECTOR_URL=http://127.0.0.1:67/api/v2/pwa/activity/collect
 ```
 
 Production collector and dashboard host:
 
 ```env
-ANALYTICS_COLLECTOR_URL=https://api.squadras.cc/api/v2/pwa/analytics/events
+ANALYTICS_COLLECTOR_URL=https://api.squadras.cc/api/v2/pwa/activity/collect
 CORS_ALLOW_ALL_ORIGINS=true
 ```
 
@@ -61,6 +61,7 @@ Public ingestion routes:
 
 ```text
 POST /api/v1/events
+POST /api/v2/pwa/activity/collect
 POST /api/v2/pwa/analytics/events
 ```
 
@@ -121,7 +122,10 @@ customer_id, product_id, order_id, booking_id, search
 - OrderMore block impressions, product impressions, clicks, cart additions,
   attributed orders, final ordered quantity, revenue and product breakdown.
 - percentage of orders containing an attributed OrderMore product;
-- unique mobile visitors and the share that added from tile mode;
+- mobile menu sessions, layout switches, returns to list, tile cart additions
+  and final orders containing products added from tile mode;
+- average and median real browser clicks before each created order, including
+  an hourly/daily/weekly trend;
 - aggregated anonymous search terms;
 - order and booking comment feeds.
 

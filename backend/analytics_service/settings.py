@@ -79,7 +79,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOW_ALL_ORIGINS = env_bool("CORS_ALLOW_ALL_ORIGINS", False)
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
-CORS_URLS_REGEX = r"^/api/(v1/events/?|v2/pwa/analytics/events/?)$"
+CORS_URLS_REGEX = r"^/api/(v1/events/?|v2/pwa/(analytics/events|activity/collect)/?)$"
 CORS_ALLOW_HEADERS = ["accept", "content-type", "user-agent", "x-requested-with"]
 CORS_ALLOW_CREDENTIALS = False
 
@@ -97,4 +97,3 @@ CACHES = {
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
-

@@ -113,8 +113,23 @@ button { cursor: pointer; }
 .timeline-chart__legend span { display: flex; align-items: center; gap: 6px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .dot--events { background: var(--green); }.dot--visitors { background: var(--orange); }
+.dot--average { background: var(--green); }.dot--median { background: #e58b3c; }
+.timeline-chart__line--average { stroke: var(--green); }
+.timeline-chart__line--median { stroke: #e58b3c; stroke-width: 2; stroke-dasharray: 7 6; }
+.timeline-chart__point--average { stroke: var(--green); }
 .empty-chart, .empty-compact { display: grid; place-items: center; min-height: 170px; color: #8a9690; background: #f8faf9; border-radius: 14px; font-size: 13px; }
 .empty-compact { min-height: 120px; }
+
+.metric-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.metric-strip article { min-height: 112px; padding: 17px; border: 1px solid #e2e9e5; border-radius: 15px; background: linear-gradient(145deg, #fbfdfc, #f4f8f6); }
+.metric-strip small, .journey-summary article small { display: block; min-height: 30px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.metric-strip strong { display: block; margin: 4px 0; color: var(--green); font-size: 25px; }
+.metric-strip span, .journey-summary article span { color: #8a9690; font-size: 9px; line-height: 1.35; }
+.click-journey-panel { overflow: hidden; background: linear-gradient(135deg, #fff 0%, #f8fbf9 70%, #edf7f1 100%); }
+.journey-summary { display: grid; grid-template-columns: 150px 150px minmax(0, 1fr); align-items: stretch; gap: 14px; }
+.journey-summary > article { display: flex; min-height: 150px; padding: 22px; flex-direction: column; justify-content: center; border: 1px solid #dfe9e4; border-radius: 16px; background: white; }
+.journey-summary > article strong { display: block; margin: 8px 0 2px; color: var(--green); font-size: 40px; letter-spacing: -.05em; }
+.order-clicks-chart { min-width: 0; }
 
 .funnel { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding-bottom: 5px; }
 .funnel__step { flex: 1 0 155px; padding: 16px; border-radius: 15px; background: #f5f8f6; }
@@ -199,6 +214,8 @@ td { padding: 13px; border-bottom: 1px solid #edf1ef; font-size: 12px; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .manager-grid { grid-template-columns: 1fr; }
   .upsell-panel { grid-template-columns: 1fr; }
+  .metric-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .journey-summary { grid-template-columns: 130px 130px minmax(0, 1fr); }
 }
 
 @media (max-width: 720px) {
@@ -210,6 +227,9 @@ td { padding: 13px; border-bottom: 1px solid #edf1ef; font-size: 12px; }
   .comment-feed--columns { grid-template-columns: 1fr; }
   .kpi-card { min-height: 105px; }
   .upsell-panel { padding: 22px; }.upsell-stats { grid-template-columns: repeat(2, 1fr); }
+  .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .journey-summary { grid-template-columns: 1fr 1fr; }
+  .journey-summary .order-clicks-chart, .journey-summary .empty-chart { grid-column: 1 / -1; }
   .panel, .filters-card { padding: 18px; border-radius: 16px; }
   .funnel__arrow { display: none; }
   .events-table { min-width: 850px; }

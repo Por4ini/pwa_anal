@@ -4,6 +4,8 @@ from . import views
 
 
 urlpatterns = [
+    path("v2/pwa/activity/collect", views.collect_events, name="collect_pwa_activity"),
+    path("v2/pwa/activity/collect/", views.collect_events),
     path("v1/events", views.collect_events, name="collect_events"),
     path("v1/events/", views.collect_events),
     path("v2/pwa/analytics/events", views.collect_events, name="collect_pwa_events"),
@@ -13,4 +15,3 @@ urlpatterns = [
     path("dashboard/events", views.dashboard_events, name="dashboard_events"),
     path("dashboard/events.csv", views.dashboard_events_csv, name="dashboard_events_csv"),
 ]
-

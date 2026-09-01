@@ -8,7 +8,7 @@ from .models import AnalyticsEvent
 
 @override_settings(DASHBOARD_TOKEN="dashboard-secret", ANALYTICS_REQUESTS_PER_MINUTE=0)
 class AnalyticsApiTests(TestCase):
-    endpoint = "/api/v2/pwa/analytics/events"
+    endpoint = "/api/v2/pwa/activity/collect"
 
     def event(self, **overrides):
         payload = {
@@ -53,6 +53,15 @@ class AnalyticsApiTests(TestCase):
         self.assertEqual(stored.interaction_surface, "tile")
         self.assertTrue(stored.ip_hash)
 
+    def test_legacy_collector_route_remains_available(self):
+        response = self.client.post(
+            "/api/v2/pwa/analytics/events",
+            data=json.dumps({"events": [self.event()]}),
+            content_type="text/plain",
+        )
+
+        self.assertEqual(response.status_code, 202)
+
     def test_duplicate_event_is_idempotent(self):
         event = self.event()
         self.post_events([event])
@@ -96,9 +105,13 @@ class AnalyticsApiTests(TestCase):
         events = [
             self.event(event_name="session_started", visitor_id="mobile-1", product_id="", properties={}),
             self.event(event_name="session_started", visitor_id="mobile-2", product_id="", properties={}),
+            self.event(event_name="menu_layout_viewed", visitor_id="mobile-1", session_id="session-1", product_id="", interaction_surface="list", properties={"mode": "list"}),
+            self.event(event_name="menu_layout_viewed", visitor_id="mobile-2", session_id="session-2", product_id="", interaction_surface="list", properties={"mode": "list"}),
+            self.event(event_name="menu_layout_changed", visitor_id="mobile-1", session_id="session-1", product_id="", interaction_surface="tile", properties={"from_mode": "list", "to_mode": "tile"}),
             self.event(event_name="cart_item_added", visitor_id="mobile-1", properties={"product_name": "Roll"}),
-            self.event(event_name="order_created", visitor_id="mobile-1", order_id="order-1", product_id="", properties={"total": 500, "order_comment": "Без васабі"}),
-            self.event(event_name="order_created", visitor_id="mobile-2", order_id="order-2", product_id="", properties={"total": 700}),
+            self.event(event_name="menu_layout_changed", visitor_id="mobile-1", session_id="session-1", product_id="", interaction_surface="list", properties={"from_mode": "tile", "to_mode": "list"}),
+            self.event(event_name="order_created", visitor_id="mobile-1", session_id="session-1", order_id="order-1", product_id="", properties={"total": 500, "order_comment": "Без васабі", "clicks_to_order": 10, "menu_mode": {"final_mode": "list", "tile_product_count": 1, "list_product_count": 0}}),
+            self.event(event_name="order_created", visitor_id="mobile-2", session_id="session-2", order_id="order-2", product_id="", properties={"total": 700, "clicks_to_order": 4, "menu_mode": {"final_mode": "list", "tile_product_count": 0, "list_product_count": 1}}),
             self.event(event_name="upsell_order_attributed", visitor_id="mobile-1", order_id="order-1", product_id="", properties={"quantity": 1, "revenue": 50, "products": []}),
             self.event(event_name="menu_searched", visitor_id="must-disappear", session_id="must-disappear", customer_id="must-disappear", page_path="/private", product_id="", properties={"search_term": "Філадельфія"}),
             self.event(event_name="booking_created", visitor_id="mobile-1", booking_id="booking-1", product_id="", properties={"booking_comment": "Біля вікна", "guest_count": 2}),
@@ -112,9 +125,16 @@ class AnalyticsApiTests(TestCase):
         self.assertEqual(overview["upsell"]["total_orders"], 2)
         self.assertEqual(overview["upsell"]["attributed_orders"], 1)
         self.assertEqual(overview["upsell"]["order_share_rate"], 50.0)
-        self.assertEqual(overview["mobile_tile"]["mobile_visitors"], 2)
-        self.assertEqual(overview["mobile_tile"]["tile_cart_visitors"], 1)
-        self.assertEqual(overview["mobile_tile"]["conversion_rate"], 50.0)
+        self.assertEqual(overview["mobile_tile"]["eligible_sessions"], 2)
+        self.assertEqual(overview["mobile_tile"]["switched_to_tile_sessions"], 1)
+        self.assertEqual(overview["mobile_tile"]["returned_to_list_sessions"], 1)
+        self.assertEqual(overview["mobile_tile"]["return_rate"], 100.0)
+        self.assertEqual(overview["mobile_tile"]["tile_cart_sessions"], 1)
+        self.assertEqual(overview["mobile_tile"]["tile_orders"], 1)
+        self.assertEqual(overview["mobile_tile"]["tile_order_share_rate"], 50.0)
+        self.assertEqual(overview["click_journey"]["orders"], 2)
+        self.assertEqual(overview["click_journey"]["average"], 7.0)
+        self.assertEqual(overview["click_journey"]["median"], 7.0)
         self.assertEqual(overview["searches"]["queries"][0], {"query": "Філадельфія", "count": 1})
         self.assertEqual(overview["order_comments"]["items"][0]["comment"], "Без васабі")
         self.assertEqual(overview["booking_comments"]["items"][0]["comment"], "Біля вікна")

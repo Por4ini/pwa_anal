@@ -112,10 +112,37 @@
           </article>
           <article class="manager-card manager-card--tile">
             <span class="eyebrow">МОБІЛЬНА ПЛИТКА</span>
-            <h3>Відвідувачі, що додали товар</h3>
-            <strong>{{ decimal(overview.mobile_tile.conversion_rate) }}%</strong>
-            <p>{{ number(overview.mobile_tile.tile_cart_visitors) }} із {{ number(overview.mobile_tile.mobile_visitors) }} мобільних відвідувачів; {{ number(overview.mobile_tile.tile_cart_adds) }} додавань.</p>
+            <h3>Сесії, що увімкнули плитку</h3>
+            <strong>{{ decimal(overview.mobile_tile.switch_rate) }}%</strong>
+            <p>{{ number(overview.mobile_tile.switched_to_tile_sessions) }} із {{ number(overview.mobile_tile.eligible_sessions) }} сесій меню; {{ decimal(overview.mobile_tile.return_rate) }}% повернулися до списку.</p>
           </article>
+        </section>
+
+        <section class="panel panel--wide">
+          <div class="panel__heading">
+            <div><span class="eyebrow">МОБІЛЬНЕ МЕНЮ</span><h3>Чи продовжують замовлення з плитки</h3></div>
+            <span class="panel__meta">{{ number(overview.mobile_tile.switch_clicks) }} перемикань</span>
+          </div>
+          <div class="metric-strip">
+            <article><small>Увімкнули плитку</small><strong>{{ number(overview.mobile_tile.switched_to_tile_sessions) }}</strong><span>{{ decimal(overview.mobile_tile.switch_rate) }}% сесій</span></article>
+            <article><small>Повернулися в список</small><strong>{{ number(overview.mobile_tile.returned_to_list_sessions) }}</strong><span>{{ decimal(overview.mobile_tile.return_rate) }}% після плитки</span></article>
+            <article><small>Додавали з плитки</small><strong>{{ number(overview.mobile_tile.tile_cart_sessions) }}</strong><span>{{ number(overview.mobile_tile.tile_cart_adds) }} додавань</span></article>
+            <article><small>Замовлення з плитки</small><strong>{{ number(overview.mobile_tile.tile_orders) }}</strong><span>{{ decimal(overview.mobile_tile.tile_order_share_rate) }}% mobile orders</span></article>
+            <article><small>Tile → кошик</small><strong>{{ decimal(overview.mobile_tile.tile_cart_conversion_rate) }}%</strong><span>серед тих, хто перемкнув</span></article>
+            <article><small>Tile → замовлення</small><strong>{{ decimal(overview.mobile_tile.tile_order_conversion_rate) }}%</strong><span>серед тих, хто перемкнув</span></article>
+          </div>
+        </section>
+
+        <section class="panel panel--wide click-journey-panel">
+          <div class="panel__heading">
+            <div><span class="eyebrow">ШЛЯХ ДО ЗАМОВЛЕННЯ</span><h3>Кліки до успішного оформлення</h3></div>
+            <span class="panel__meta">{{ number(overview.click_journey.orders) }} замовлень із лічильником</span>
+          </div>
+          <div class="journey-summary">
+            <article><small>Середнє</small><strong>{{ decimal(overview.click_journey.average) }}</strong><span>кліків</span></article>
+            <article><small>Медіана</small><strong>{{ decimal(overview.click_journey.median) }}</strong><span>кліків</span></article>
+            <OrderClicksChart :points="overview.click_journey.timeline" />
+          </div>
         </section>
 
         <section class="panel panel--wide">
@@ -271,6 +298,7 @@ import { ApiError, apiGet, exportEventsCsv, getToken, setToken } from "./api";
 import BreakdownBars from "./components/BreakdownBars.vue";
 import EventDetails from "./components/EventDetails.vue";
 import KpiCard from "./components/KpiCard.vue";
+import OrderClicksChart from "./components/OrderClicksChart.vue";
 import TimelineChart from "./components/TimelineChart.vue";
 
 
@@ -292,7 +320,8 @@ const emptyOverview = () => ({
   breakdowns: { events: [], clients: [], sources: [], locations: [] },
   top_products: [], top_pages: [],
   upsell: { block_impressions: 0, product_impressions: 0, clicks: 0, cart_adds: 0, attributed_orders: 0, total_orders: 0, order_share_rate: 0, quantity: 0, revenue: 0, click_to_cart_rate: 0, click_to_order_rate: 0, products: [] },
-  mobile_tile: { mobile_visitors: 0, tile_cart_visitors: 0, tile_cart_adds: 0, conversion_rate: 0 },
+  mobile_tile: { eligible_sessions: 0, switch_clicks: 0, switched_to_tile_sessions: 0, switch_rate: 0, returned_to_list_sessions: 0, return_rate: 0, tile_cart_sessions: 0, tile_cart_adds: 0, tile_cart_conversion_rate: 0, mobile_orders: 0, tile_orders: 0, list_orders: 0, final_tile_orders: 0, tile_order_conversion_rate: 0, tile_order_share_rate: 0 },
+  click_journey: { orders: 0, average: 0, median: 0, timeline: [] },
   searches: { total: 0, unique: 0, queries: [] },
   order_comments: { total: 0, items: [] },
   booking_comments: { total: 0, items: [] },
@@ -321,6 +350,7 @@ const granularityLabel = computed(() => ({ hour: "погодинно", day: "п�
 
 const labels = {
   session_started: "Старт сесії", page_viewed: "Перегляд сторінки", page_engagement: "Взаємодія зі сторінкою",
+  menu_layout_viewed: "Показ режиму меню", menu_layout_changed: "Змінено режим меню",
   menu_searched: "Пошук", product_viewed: "Перегляд товару", wishlist_item_added: "У бажане", contact_clicked: "Контакт",
   cart_item_added: "Додано в кошик", cart_quantity_changed: "Змінено кількість", cart_item_removed: "Видалено з кошика",
   cart_cleared: "Кошик очищено", checkout_started: "Початок оформлення", order_created: "Замовлення створено",

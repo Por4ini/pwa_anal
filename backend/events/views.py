@@ -4,6 +4,7 @@ import io
 import json
 import re
 import secrets
+import statistics
 import uuid
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone as datetime_timezone
@@ -349,25 +350,125 @@ def _upsell_summary(queryset):
     }
 
 
+def _rate(numerator, denominator):
+    return round(numerator / denominator * 100, 2) if denominator else 0
+
+
 def _mobile_tile_summary(queryset):
-    mobile_visitors = (
-        queryset.filter(device_type="mobile")
-        .exclude(visitor_id="")
-        .values("visitor_id")
-        .distinct()
-        .count()
+    eligible_sessions = set()
+    switched_to_tile_sessions = set()
+    returned_to_list_sessions = set()
+    tile_cart_sessions = set()
+    switch_clicks = 0
+    tile_cart_adds = 0
+
+    mobile_events = queryset.filter(device_type="mobile", event_name__in=[
+        "menu_layout_viewed", "menu_layout_changed", "cart_item_added",
+    ]).only("event_name", "session_id", "interaction_surface", "properties")
+    for event in mobile_events.iterator(chunk_size=1000):
+        properties = event.properties or {}
+        if event.event_name == "menu_layout_viewed" and event.session_id:
+            eligible_sessions.add(event.session_id)
+        elif event.event_name == "menu_layout_changed":
+            switch_clicks += 1
+            if event.session_id and _text(properties.get("to_mode"), 16) == "tile":
+                switched_to_tile_sessions.add(event.session_id)
+            if (
+                event.session_id
+                and _text(properties.get("from_mode"), 16) == "tile"
+                and _text(properties.get("to_mode"), 16) == "list"
+            ):
+                returned_to_list_sessions.add(event.session_id)
+        elif event.interaction_surface == "tile":
+            tile_cart_adds += 1
+            if event.session_id:
+                tile_cart_sessions.add(event.session_id)
+
+    tile_order_ids = set()
+    list_order_ids = set()
+    final_tile_order_ids = set()
+    mobile_order_ids = set()
+    tile_order_sessions = set()
+    order_events = queryset.filter(event_name="order_created", device_type="mobile").only(
+        "order_id", "session_id", "properties"
     )
-    tile_adds = queryset.filter(
-        event_name="cart_item_added",
-        device_type="mobile",
-        interaction_surface="tile",
-    )
-    tile_cart_visitors = tile_adds.exclude(visitor_id="").values("visitor_id").distinct().count()
+    for event in order_events.iterator(chunk_size=1000):
+        if not event.order_id:
+            continue
+        mobile_order_ids.add(event.order_id)
+        menu_mode = (event.properties or {}).get("menu_mode") or {}
+        if not isinstance(menu_mode, dict):
+            continue
+        if _number(menu_mode.get("tile_product_count")) > 0:
+            tile_order_ids.add(event.order_id)
+            if event.session_id:
+                tile_order_sessions.add(event.session_id)
+        if _number(menu_mode.get("list_product_count")) > 0:
+            list_order_ids.add(event.order_id)
+        if _text(menu_mode.get("final_mode"), 16) == "tile":
+            final_tile_order_ids.add(event.order_id)
+
     return {
-        "mobile_visitors": mobile_visitors,
-        "tile_cart_visitors": tile_cart_visitors,
-        "tile_cart_adds": tile_adds.count(),
-        "conversion_rate": round(tile_cart_visitors / mobile_visitors * 100, 2) if mobile_visitors else 0,
+        "eligible_sessions": len(eligible_sessions),
+        "switch_clicks": switch_clicks,
+        "switched_to_tile_sessions": len(switched_to_tile_sessions),
+        "switch_rate": _rate(len(switched_to_tile_sessions), len(eligible_sessions)),
+        "returned_to_list_sessions": len(returned_to_list_sessions),
+        "return_rate": _rate(len(returned_to_list_sessions), len(switched_to_tile_sessions)),
+        "tile_cart_sessions": len(tile_cart_sessions),
+        "tile_cart_adds": tile_cart_adds,
+        "tile_cart_conversion_rate": _rate(
+            len(tile_cart_sessions & switched_to_tile_sessions), len(switched_to_tile_sessions)
+        ),
+        "mobile_orders": len(mobile_order_ids),
+        "tile_orders": len(tile_order_ids),
+        "list_orders": len(list_order_ids),
+        "final_tile_orders": len(final_tile_order_ids),
+        "tile_order_conversion_rate": _rate(
+            len(tile_order_sessions & switched_to_tile_sessions), len(switched_to_tile_sessions)
+        ),
+        "tile_order_share_rate": _rate(len(tile_order_ids), len(mobile_order_ids)),
+    }
+
+
+def _journey_bucket(value, granularity):
+    if granularity == "hour":
+        return value.replace(minute=0, second=0, microsecond=0)
+    if granularity == "week":
+        start = value - timedelta(days=value.weekday())
+        return start.replace(hour=0, minute=0, second=0, microsecond=0)
+    return value.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _click_journey_summary(queryset, granularity):
+    orders = {}
+    for event in queryset.filter(event_name="order_created").exclude(order_id="").only(
+        "order_id", "occurred_at", "properties"
+    ).order_by("occurred_at").iterator(chunk_size=1000):
+        properties = event.properties or {}
+        if "clicks_to_order" not in properties:
+            continue
+        clicks = max(0, int(_number(properties.get("clicks_to_order"))))
+        orders[event.order_id] = (event.occurred_at, clicks)
+
+    values = [item[1] for item in orders.values()]
+    buckets = defaultdict(list)
+    for occurred_at, clicks in orders.values():
+        buckets[_journey_bucket(occurred_at, granularity)].append(clicks)
+
+    return {
+        "orders": len(values),
+        "average": round(statistics.fmean(values), 2) if values else 0,
+        "median": round(float(statistics.median(values)), 2) if values else 0,
+        "timeline": [
+            {
+                "bucket": bucket.isoformat(),
+                "orders": len(clicks),
+                "average": round(statistics.fmean(clicks), 2),
+                "median": round(float(statistics.median(clicks)), 2),
+            }
+            for bucket, clicks in sorted(buckets.items())
+        ],
     }
 
 
@@ -557,6 +658,7 @@ def dashboard_overview(request):
         "top_pages": top_pages,
         "upsell": _upsell_summary(queryset),
         "mobile_tile": _mobile_tile_summary(queryset),
+        "click_journey": _click_journey_summary(queryset, granularity),
         "searches": _search_summary(queryset),
         "order_comments": _comment_feed(queryset, "order_created", "order_comment", "order_id"),
         "booking_comments": _comment_feed(queryset, "booking_created", "booking_comment", "booking_id"),
