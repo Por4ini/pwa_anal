@@ -38,9 +38,9 @@
       <section class="content">
         <div class="hero-row">
           <div>
-            <span class="eyebrow">ОГЛЯД ПОВЕДІНКИ</span>
-            <h2>Що роблять користувачі</h2>
-            <p>Події, конверсія, замовлення та ефективність блоку «Додати ще».</p>
+            <span class="eyebrow">{{ activeTab === "clicks" ? "ШЛЯХ ДО ЗАМОВЛЕННЯ" : "ОГЛЯД ПОВЕДІНКИ" }}</span>
+            <h2>{{ activeTab === "clicks" ? "Кліки до замовлення" : "Що роблять користувачі" }}</h2>
+            <p>{{ activeTab === "clicks" ? "Середня та медіанна кількість кліків до успішного оформлення." : "Події, конверсія, замовлення та ефективність блоку «Додати ще»." }}</p>
           </div>
           <button class="button button--export" @click="downloadCsv">↓ Експорт CSV</button>
         </div>
@@ -96,6 +96,52 @@
 
         <div v-if="error" class="notice notice--error">{{ error }}</div>
 
+        <nav class="dashboard-tabs" role="tablist" aria-label="Розділи аналітики">
+          <button
+            id="overview-tab"
+            class="dashboard-tab"
+            :class="{ 'is-active': activeTab === 'overview' }"
+            type="button"
+            role="tab"
+            aria-controls="overview-panel"
+            :aria-selected="activeTab === 'overview'"
+            @click="activeTab = 'overview'"
+          >
+            Огляд
+          </button>
+          <button
+            id="clicks-tab"
+            class="dashboard-tab"
+            :class="{ 'is-active': activeTab === 'clicks' }"
+            type="button"
+            role="tab"
+            aria-controls="clicks-panel"
+            :aria-selected="activeTab === 'clicks'"
+            @click="activeTab = 'clicks'"
+          >
+            Кліки до замовлення
+          </button>
+        </nav>
+
+        <section
+          v-if="activeTab === 'clicks'"
+          id="clicks-panel"
+          class="panel panel--wide click-journey-panel dashboard-tab-panel"
+          role="tabpanel"
+          aria-labelledby="clicks-tab"
+        >
+          <div class="panel__heading">
+            <div><span class="eyebrow">ШЛЯХ ДО ЗАМОВЛЕННЯ</span><h3>Кліки до успішного оформлення</h3></div>
+            <span class="panel__meta">{{ number(overview.click_journey.orders) }} замовлень із лічильником</span>
+          </div>
+          <div class="journey-summary">
+            <article><small>Середнє</small><strong>{{ decimal(overview.click_journey.average) }}</strong><span>кліків</span></article>
+            <article><small>Медіана</small><strong>{{ decimal(overview.click_journey.median) }}</strong><span>кліків</span></article>
+            <OrderClicksChart :points="overview.click_journey.timeline" />
+          </div>
+        </section>
+
+        <div v-else id="overview-panel" class="dashboard-tab-panel" role="tabpanel" aria-labelledby="overview-tab">
         <section class="kpi-grid">
           <KpiCard label="Усього подій" :value="number(overview.totals.total_events)" icon="↗" />
           <KpiCard label="Відвідувачі" :value="number(overview.totals.visitors)" :hint="`${number(overview.totals.sessions)} сесій`" icon="◉" />
@@ -112,9 +158,9 @@
           </article>
           <article class="manager-card manager-card--tile">
             <span class="eyebrow">МОБІЛЬНА ПЛИТКА</span>
-            <h3>Сесії, що увімкнули плитку</h3>
-            <strong>{{ decimal(overview.mobile_tile.switch_rate) }}%</strong>
-            <p>{{ number(overview.mobile_tile.switched_to_tile_sessions) }} із {{ number(overview.mobile_tile.eligible_sessions) }} сесій меню; {{ decimal(overview.mobile_tile.return_rate) }}% повернулися до списку.</p>
+            <h3>Сесії з перемиканням вигляду</h3>
+            <strong>{{ number(overview.mobile_tile.switched_layout_sessions) }}</strong>
+            <p>{{ decimal(overview.mobile_tile.switch_rate) }}% із {{ number(overview.mobile_tile.eligible_sessions) }} сесій меню; {{ decimal(overview.mobile_tile.return_rate) }}% тих, хто вмикав плитку, повернулися до списку.</p>
           </article>
         </section>
 
@@ -124,24 +170,12 @@
             <span class="panel__meta">{{ number(overview.mobile_tile.switch_clicks) }} перемикань</span>
           </div>
           <div class="metric-strip">
-            <article><small>Увімкнули плитку</small><strong>{{ number(overview.mobile_tile.switched_to_tile_sessions) }}</strong><span>{{ decimal(overview.mobile_tile.switch_rate) }}% сесій</span></article>
+            <article><small>Перемикали вигляд</small><strong>{{ number(overview.mobile_tile.switched_layout_sessions) }}</strong><span>{{ decimal(overview.mobile_tile.switch_rate) }}% сесій</span></article>
             <article><small>Повернулися в список</small><strong>{{ number(overview.mobile_tile.returned_to_list_sessions) }}</strong><span>{{ decimal(overview.mobile_tile.return_rate) }}% після плитки</span></article>
             <article><small>Додавали з плитки</small><strong>{{ number(overview.mobile_tile.tile_cart_sessions) }}</strong><span>{{ number(overview.mobile_tile.tile_cart_adds) }} додавань</span></article>
             <article><small>Замовлення з плитки</small><strong>{{ number(overview.mobile_tile.tile_orders) }}</strong><span>{{ decimal(overview.mobile_tile.tile_order_share_rate) }}% mobile orders</span></article>
             <article><small>Tile → кошик</small><strong>{{ decimal(overview.mobile_tile.tile_cart_conversion_rate) }}%</strong><span>серед тих, хто перемкнув</span></article>
             <article><small>Tile → замовлення</small><strong>{{ decimal(overview.mobile_tile.tile_order_conversion_rate) }}%</strong><span>серед тих, хто перемкнув</span></article>
-          </div>
-        </section>
-
-        <section class="panel panel--wide click-journey-panel">
-          <div class="panel__heading">
-            <div><span class="eyebrow">ШЛЯХ ДО ЗАМОВЛЕННЯ</span><h3>Кліки до успішного оформлення</h3></div>
-            <span class="panel__meta">{{ number(overview.click_journey.orders) }} замовлень із лічильником</span>
-          </div>
-          <div class="journey-summary">
-            <article><small>Середнє</small><strong>{{ decimal(overview.click_journey.average) }}</strong><span>кліків</span></article>
-            <article><small>Медіана</small><strong>{{ decimal(overview.click_journey.median) }}</strong><span>кліків</span></article>
-            <OrderClicksChart :points="overview.click_journey.timeline" />
           </div>
         </section>
 
@@ -283,6 +317,7 @@
             <button class="button button--subtle" :disabled="events.page >= totalPages || loading" @click="changePage(events.page + 1)">Далі →</button>
           </footer>
         </section>
+        </div>
       </section>
 
       <EventDetails v-if="selectedEvent" :event="selectedEvent" @close="selectedEvent = null" />
@@ -320,7 +355,7 @@ const emptyOverview = () => ({
   breakdowns: { events: [], clients: [], sources: [], locations: [] },
   top_products: [], top_pages: [],
   upsell: { block_impressions: 0, product_impressions: 0, clicks: 0, cart_adds: 0, attributed_orders: 0, total_orders: 0, order_share_rate: 0, quantity: 0, revenue: 0, click_to_cart_rate: 0, click_to_order_rate: 0, products: [] },
-  mobile_tile: { eligible_sessions: 0, switch_clicks: 0, switched_to_tile_sessions: 0, switch_rate: 0, returned_to_list_sessions: 0, return_rate: 0, tile_cart_sessions: 0, tile_cart_adds: 0, tile_cart_conversion_rate: 0, mobile_orders: 0, tile_orders: 0, list_orders: 0, final_tile_orders: 0, tile_order_conversion_rate: 0, tile_order_share_rate: 0 },
+  mobile_tile: { eligible_sessions: 0, switch_clicks: 0, switched_layout_sessions: 0, switched_to_tile_sessions: 0, switch_rate: 0, returned_to_list_sessions: 0, return_rate: 0, tile_cart_sessions: 0, tile_cart_adds: 0, tile_cart_conversion_rate: 0, mobile_orders: 0, tile_orders: 0, list_orders: 0, final_tile_orders: 0, tile_order_conversion_rate: 0, tile_order_share_rate: 0 },
   click_journey: { orders: 0, average: 0, median: 0, timeline: [] },
   searches: { total: 0, unique: 0, queries: [] },
   order_comments: { total: 0, items: [] },
@@ -333,6 +368,7 @@ const loading = ref(false);
 const error = ref("");
 const updatedAt = ref(null);
 const advancedFilters = ref(false);
+const activeTab = ref("overview");
 const selectedEvent = ref(null);
 const filters = reactive(emptyFilters());
 const appliedFilters = ref({ ...filters });

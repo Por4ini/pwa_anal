@@ -72,6 +72,14 @@ button { cursor: pointer; }
 .notice { margin: 16px 0; padding: 14px 16px; border-radius: 12px; font-size: 13px; }
 .notice--error { color: #982d25; background: #ffe9e5; }
 
+.dashboard-tabs { display: inline-flex; gap: 4px; margin: 0 0 4px; padding: 5px; border: 1px solid rgba(210, 222, 215, .9); border-radius: 15px; background: rgba(255,255,255,.78); box-shadow: 0 10px 30px rgba(20,39,31,.05); }
+.dashboard-tab { min-height: 40px; padding: 0 18px; border: 0; border-radius: 11px; color: var(--muted); background: transparent; font-size: 12px; font-weight: 750; white-space: nowrap; transition: color .15s, background .15s, box-shadow .15s, transform .15s; }
+.dashboard-tab:hover:not(.is-active) { color: var(--ink); background: #f1f5f3; }
+.dashboard-tab.is-active { color: white; background: var(--navy); box-shadow: 0 8px 18px rgba(16,24,32,.18); }
+.dashboard-tab:focus-visible { outline: 3px solid rgba(11,122,83,.24); outline-offset: 2px; }
+.dashboard-tab-panel { animation: tab-panel-in .24s ease-out; }
+@keyframes tab-panel-in { from { opacity: 0; transform: translateY(6px); } }
+
 .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin: 24px 0; }
 .kpi-card { display: flex; align-items: center; gap: 16px; min-height: 132px; padding: 22px; border-radius: 19px; }
 .kpi-card__icon { display: grid; flex: 0 0 43px; place-items: center; width: 43px; height: 43px; border-radius: 14px; color: var(--green); background: var(--green-soft); font-size: 20px; font-weight: 800; }
@@ -222,6 +230,8 @@ td { padding: 13px; border-bottom: 1px solid #edf1ef; font-size: 12px; }
   .content { width: min(100% - 28px, 1500px); padding-top: 26px; }
   .topbar { position: static; padding: 13px 15px; }.updated-at, .live-status { display: none; }.topbar .button { font-size: 0; width: 40px; padding: 0; }.topbar .button::first-letter { font-size: 18px; }
   .hero-row { align-items: flex-start; flex-direction: column; }.hero-row h2 { font-size: 34px; }
+  .dashboard-tabs { display: flex; width: 100%; overflow-x: auto; }
+  .dashboard-tab { flex: 1; }
   .filters-grid { grid-template-columns: repeat(2, 1fr); }.filter-wide { grid-column: span 2; }
   .kpi-grid, .dashboard-grid { grid-template-columns: 1fr; }
   .comment-feed--columns { grid-template-columns: 1fr; }

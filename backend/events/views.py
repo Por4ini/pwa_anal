@@ -356,6 +356,7 @@ def _rate(numerator, denominator):
 
 def _mobile_tile_summary(queryset):
     eligible_sessions = set()
+    switched_layout_sessions = set()
     switched_to_tile_sessions = set()
     returned_to_list_sessions = set()
     tile_cart_sessions = set()
@@ -371,6 +372,8 @@ def _mobile_tile_summary(queryset):
             eligible_sessions.add(event.session_id)
         elif event.event_name == "menu_layout_changed":
             switch_clicks += 1
+            if event.session_id:
+                switched_layout_sessions.add(event.session_id)
             if event.session_id and _text(properties.get("to_mode"), 16) == "tile":
                 switched_to_tile_sessions.add(event.session_id)
             if (
@@ -411,8 +414,9 @@ def _mobile_tile_summary(queryset):
     return {
         "eligible_sessions": len(eligible_sessions),
         "switch_clicks": switch_clicks,
+        "switched_layout_sessions": len(switched_layout_sessions),
         "switched_to_tile_sessions": len(switched_to_tile_sessions),
-        "switch_rate": _rate(len(switched_to_tile_sessions), len(eligible_sessions)),
+        "switch_rate": _rate(len(switched_layout_sessions), len(eligible_sessions)),
         "returned_to_list_sessions": len(returned_to_list_sessions),
         "return_rate": _rate(len(returned_to_list_sessions), len(switched_to_tile_sessions)),
         "tile_cart_sessions": len(tile_cart_sessions),
@@ -473,18 +477,58 @@ def _click_journey_summary(queryset, granularity):
 
 
 def _search_summary(queryset, limit=50):
-    totals = defaultdict(lambda: {"query": "", "count": 0})
-    total_searches = 0
-    for event in queryset.filter(event_name="menu_searched").only("properties").iterator(chunk_size=1000):
-        query = _text((event.properties or {}).get("search_term"), 256)
+    search_sequences = []
+    chained_searches = {}
+    active_legacy_searches = {}
+
+    events = queryset.filter(event_name="menu_searched").only(
+        "id", "occurred_at", "client_alias", "source", "location_id",
+        "location_uniq_id", "device_type", "properties",
+    ).order_by("occurred_at", "id").iterator(chunk_size=1000)
+
+    for event in events:
+        properties = event.properties or {}
+        query = _text(properties.get("search_term"), 256)
         if not query:
             continue
+
+        search_chain_id = _text(properties.get("search_chain_id"), 64)
+        context = (
+            event.client_alias,
+            event.source,
+            event.location_id,
+            event.location_uniq_id,
+            event.device_type,
+        )
+        if search_chain_id:
+            chained_searches[(context, search_chain_id)] = query
+            continue
+
+        previous = active_legacy_searches.get(context)
+        is_recent = previous and event.occurred_at - previous["occurred_at"] <= timedelta(seconds=5)
+        previous_query = previous["query"].casefold() if previous else ""
+        current_query = query.casefold()
+        is_continuation = previous_query and (
+            current_query.startswith(previous_query) or previous_query.startswith(current_query)
+        )
+        if is_recent and is_continuation:
+            previous["query"] = query
+            previous["occurred_at"] = event.occurred_at
+            continue
+
+        sequence = {"query": query, "occurred_at": event.occurred_at}
+        search_sequences.append(sequence)
+        active_legacy_searches[context] = sequence
+
+    search_sequences.extend({"query": query} for query in chained_searches.values())
+    totals = defaultdict(lambda: {"query": "", "count": 0})
+    for sequence in search_sequences:
+        query = sequence["query"]
         key = query.casefold()
         totals[key]["query"] = totals[key]["query"] or query
         totals[key]["count"] += 1
-        total_searches += 1
     queries = sorted(totals.values(), key=lambda item: (-item["count"], item["query"].casefold()))[:limit]
-    return {"total": total_searches, "unique": len(totals), "queries": queries}
+    return {"total": len(search_sequences), "unique": len(totals), "queries": queries}
 
 
 def _comment_feed(queryset, event_name, property_name, id_field, limit=100):

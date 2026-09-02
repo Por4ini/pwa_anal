@@ -126,6 +126,7 @@ class AnalyticsApiTests(TestCase):
         self.assertEqual(overview["upsell"]["attributed_orders"], 1)
         self.assertEqual(overview["upsell"]["order_share_rate"], 50.0)
         self.assertEqual(overview["mobile_tile"]["eligible_sessions"], 2)
+        self.assertEqual(overview["mobile_tile"]["switched_layout_sessions"], 1)
         self.assertEqual(overview["mobile_tile"]["switched_to_tile_sessions"], 1)
         self.assertEqual(overview["mobile_tile"]["returned_to_list_sessions"], 1)
         self.assertEqual(overview["mobile_tile"]["return_rate"], 100.0)
@@ -144,3 +145,36 @@ class AnalyticsApiTests(TestCase):
         self.assertEqual(search.page_path, "")
         self.assertEqual(search.user_agent, "")
         self.assertEqual(search.ip_hash, "")
+
+    def test_mobile_layout_sessions_include_tile_to_list_only_switches(self):
+        events = [
+            self.event(event_name="menu_layout_viewed", session_id="session-tile", product_id="", interaction_surface="tile", properties={"mode": "tile"}),
+            self.event(event_name="menu_layout_changed", session_id="session-tile", product_id="", interaction_surface="list", properties={"from_mode": "tile", "to_mode": "list"}),
+        ]
+
+        self.assertEqual(self.post_events(events).status_code, 202)
+        mobile_tile = self.dashboard_get("/api/dashboard/overview").json()["mobile_tile"]
+
+        self.assertEqual(mobile_tile["switched_layout_sessions"], 1)
+        self.assertEqual(mobile_tile["switched_to_tile_sessions"], 0)
+        self.assertEqual(mobile_tile["switch_rate"], 100.0)
+
+    def test_search_summary_keeps_only_final_terms_from_typing_sequences(self):
+        events = [
+            self.event(event_name="menu_searched", product_id="", occurred_at="2026-08-10T12:00:00Z", properties={"search_term": "Чі", "search_chain_id": "chain-1"}),
+            self.event(event_name="menu_searched", product_id="", occurred_at="2026-08-10T12:00:02Z", properties={"search_term": "Чікен", "search_chain_id": "chain-1"}),
+            self.event(event_name="menu_searched", product_id="", occurred_at="2026-08-10T12:01:00Z", properties={"search_term": "Чікен", "search_chain_id": "chain-2"}),
+            self.event(event_name="menu_searched", product_id="", occurred_at="2026-08-10T12:02:00Z", properties={"search_term": "Піц"}),
+            self.event(event_name="menu_searched", product_id="", occurred_at="2026-08-10T12:02:03Z", properties={"search_term": "Піца"}),
+            self.event(event_name="menu_searched", product_id="", occurred_at="2026-08-10T12:03:00Z", properties={"search_term": "Суп"}),
+            self.event(event_name="menu_searched", product_id="", occurred_at="2026-08-10T12:03:02Z", properties={"search_term": "Суші"}),
+        ]
+
+        self.assertEqual(self.post_events(events).status_code, 202)
+        searches = self.dashboard_get("/api/dashboard/overview").json()["searches"]
+
+        self.assertEqual(searches["total"], 5)
+        self.assertEqual(searches["unique"], 4)
+        self.assertEqual(searches["queries"][0], {"query": "Чікен", "count": 2})
+        self.assertNotIn("Чі", [item["query"] for item in searches["queries"]])
+        self.assertNotIn("Піц", [item["query"] for item in searches["queries"]])
