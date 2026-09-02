@@ -38,9 +38,9 @@
       <section class="content">
         <div class="hero-row">
           <div>
-            <span class="eyebrow">{{ activeTab === "clicks" ? "ШЛЯХ ДО ЗАМОВЛЕННЯ" : "ОГЛЯД ПОВЕДІНКИ" }}</span>
-            <h2>{{ activeTab === "clicks" ? "Кліки до замовлення" : "Що роблять користувачі" }}</h2>
-            <p>{{ activeTab === "clicks" ? "Середня та медіанна кількість кліків до успішного оформлення." : "Події, конверсія, замовлення та ефективність блоку «Додати ще»." }}</p>
+            <span class="eyebrow">{{ activeSection.eyebrow }}</span>
+            <h2>{{ activeSection.title }}</h2>
+            <p>{{ activeSection.description }}</p>
           </div>
           <button class="button button--export" @click="downloadCsv">↓ Експорт CSV</button>
         </div>
@@ -110,6 +110,18 @@
             Огляд
           </button>
           <button
+            id="dynamics-tab"
+            class="dashboard-tab"
+            :class="{ 'is-active': activeTab === 'dynamics' }"
+            type="button"
+            role="tab"
+            aria-controls="dynamics-panel"
+            :aria-selected="activeTab === 'dynamics'"
+            @click="activeTab = 'dynamics'"
+          >
+            Динаміка
+          </button>
+          <button
             id="clicks-tab"
             class="dashboard-tab"
             :class="{ 'is-active': activeTab === 'clicks' }"
@@ -139,6 +151,20 @@
             <article><small>Медіана</small><strong>{{ decimal(overview.click_journey.median) }}</strong><span>кліків</span></article>
             <OrderClicksChart :points="overview.click_journey.timeline" />
           </div>
+        </section>
+
+        <section
+          v-else-if="activeTab === 'dynamics'"
+          id="dynamics-panel"
+          class="panel panel--wide dashboard-tab-panel"
+          role="tabpanel"
+          aria-labelledby="dynamics-tab"
+        >
+          <div class="panel__heading">
+            <div><span class="eyebrow">ДИНАМІКА</span><h3>Події та відвідувачі</h3></div>
+            <span class="panel__meta">{{ granularityLabel }}</span>
+          </div>
+          <TimelineChart :points="overview.timeline" />
         </section>
 
         <div v-else id="overview-panel" class="dashboard-tab-panel" role="tabpanel" aria-labelledby="overview-tab">
@@ -177,14 +203,6 @@
             <article><small>Tile → кошик</small><strong>{{ decimal(overview.mobile_tile.tile_cart_conversion_rate) }}%</strong><span>серед тих, хто перемкнув</span></article>
             <article><small>Tile → замовлення</small><strong>{{ decimal(overview.mobile_tile.tile_order_conversion_rate) }}%</strong><span>серед тих, хто перемкнув</span></article>
           </div>
-        </section>
-
-        <section class="panel panel--wide">
-          <div class="panel__heading">
-            <div><span class="eyebrow">ДИНАМІКА</span><h3>Події та відвідувачі</h3></div>
-            <span class="panel__meta">{{ granularityLabel }}</span>
-          </div>
-          <TimelineChart :points="overview.timeline" />
         </section>
 
         <section class="panel panel--wide">
@@ -375,6 +393,25 @@ const appliedFilters = ref({ ...filters });
 const meta = reactive({ filters: { client_aliases: [], sources: [], event_names: [], locations: [], location_uniq_ids: [], device_types: [], interaction_surfaces: [] } });
 const overview = reactive(emptyOverview());
 const events = reactive({ count: 0, page: 1, page_size: 50, results: [] });
+
+const dashboardSections = {
+  overview: {
+    eyebrow: "ОГЛЯД ПОВЕДІНКИ",
+    title: "Що роблять користувачі",
+    description: "Події, конверсія, замовлення та ефективність блоку «Додати ще».",
+  },
+  dynamics: {
+    eyebrow: "ДИНАМІКА",
+    title: "Події та відвідувачі",
+    description: "Зміна активності користувачів у вибраному періоді.",
+  },
+  clicks: {
+    eyebrow: "ШЛЯХ ДО ЗАМОВЛЕННЯ",
+    title: "Кліки до замовлення",
+    description: "Середня та медіанна кількість кліків до успішного оформлення.",
+  },
+};
+const activeSection = computed(() => dashboardSections[activeTab.value] || dashboardSections.overview);
 
 const number = (value) => new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 }).format(Number(value) || 0);
 const decimal = (value) => new Intl.NumberFormat("uk-UA", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value) || 0);
